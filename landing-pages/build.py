@@ -19,7 +19,7 @@ from pages import PAGES, THANK_YOU, CONTACT
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(ROOT, "src")
 DIST = os.path.join(ROOT, "dist")
-ASSET_VER = "2"
+ASSET_VER = "3"
 PREVIEW = os.environ.get("PREVIEW") == "1"
 POOL = ["c-villa-living-2", "c-villa-lounge", "c-apt-living", "c-villa-suite", "g17-bedroom-wardrobe", "v91-shower",
         "c-omniyat-boardroom", "c-mazaya-lounge", "c-apt-bedroom", "v91-hall", "c-villa-bedroom", "g17-living"]
@@ -27,8 +27,7 @@ POOL = ["c-villa-living-2", "c-villa-lounge", "c-apt-living", "c-villa-suite", "
 
 def sub(src):
     """Preview only: photos hosted on haustechs.ae can't load in the preview, so use a project photo instead."""
-    if not PREVIEW or src.startswith("work/"):
-        return src
+    return src
     return "work/" + POOL[sum(map(ord, src)) % len(POOL)]
 
 e = html.escape
@@ -83,14 +82,24 @@ FONTS_AR = FONTS_EN + "&family=Amiri:wght@400;700&family=IBM+Plex+Sans+Arabic:wg
 
 
 def head(p, extra=""):
+    html_head = head_real(p, extra)
     if PREVIEW:
-        return head_real(p, extra).replace(TRACK_HEAD, "<!-- tracking removed in preview -->")
+        html_head = html_head.replace(TRACK_HEAD, "<!-- tracking removed in preview -->")
+    return html_head
 
 
 def head_real(p, extra=""):
     fonts = FONTS_AR if p.get("rtl") else FONTS_EN
     hero = p.get("hero", {}).get("img")
-    preload = f'<link rel="preload" as="image" href="{e(hero)}" fetchpriority="high">' if hero else ""
+    if p.get("hero", {}).get("slides"):
+        hero = p["hero"]["slides"][0][0]
+    if hero and hero.startswith("work/"):
+        name = hero[5:]
+        hero = f"lp-images/work/{name}.jpg"
+        preload = (f'<link rel="preload" as="image" href="{hero}" imagesrcset="lp-images/work/{name}-sm.jpg 800w, {hero} 1600w" '
+                   f'imagesizes="100vw" fetchpriority="high">')
+    else:
+        preload = f'<link rel="preload" as="image" href="{e(hero)}" fetchpriority="high">' if hero else ""
     return f"""<!doctype html>
 <html lang="{p['lang']}"{' dir="rtl"' if p.get('rtl') else ''}>
 <head>
@@ -103,9 +112,11 @@ def head_real(p, extra=""):
 <meta name="theme-color" content="#F0E9DC">
 <meta property="og:title" content="{e(p['title'])}">
 {f'<meta property="og:description" content="{e(p["desc"])}">' if p.get('desc') else ''}
-{f'<meta property="og:image" content="{e(hero)}">' if hero and hero.startswith('http') else ''}
-<link rel="icon" type="image/png" sizes="192x192" href="https://haustechs.ae/wp-content/uploads/2026/04/cropped-cropped-IMG_7040-192x192.png">
-<link rel="apple-touch-icon" href="https://haustechs.ae/wp-content/uploads/2026/04/cropped-cropped-IMG_7040-192x192.png">
+{f'<meta property="og:image" content="https://haustechs.ae/{hero}">' if hero and hero.startswith('lp-images') else ''}
+<link rel="icon" href="lp-assets/brand/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="lp-assets/brand/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="lp-assets/brand/favicon-192.png">
+<link rel="apple-touch-icon" href="lp-assets/brand/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?{fonts}&display=swap">
@@ -149,11 +160,24 @@ def img(src, alt, cls="", lazy=True, soft=False, w=None, h=None, sizes="(max-wid
 
 
 # ---------------------------------------------------------------- blocks
+LOGO_D = '<img class="logo logo-d" src="lp-assets/brand/logo-dark.png" srcset="lp-assets/brand/logo-dark.png 1x, lp-assets/brand/logo-dark@2x.png 2x" alt="Haus Techs" width="247" height="96">'
+LOGO_L = '<img class="logo logo-l" src="lp-assets/brand/logo-light.png" srcset="lp-assets/brand/logo-light.png 1x, lp-assets/brand/logo-light@2x.png 2x" alt="" aria-hidden="true" width="247" height="96">'
+
+
+def heading(a, b=None, tag="h2", hid=None, cls=""):
+    """Headline with masked line reveals: each line slides up from behind its own clip."""
+    idattr = f' id="{hid}"' if hid else ""
+    lines = f'<span class="ln"><span>{a}</span></span>'
+    if b:
+        lines += f'<span class="ln it"><span>{b}</span></span>'
+    return f'<{tag}{idattr} class="rvm {cls}">{lines}</{tag}>'
+
+
 def nav(p, t):
     return f"""<a class="skip" href="#main">{t['skip']}</a>
 <div class="pbar" aria-hidden="true"></div>
 <header class="nav"><div class="nav-in">
-  <a href="https://haustechs.ae" aria-label="Haus Techs"><img class="logo" src="https://haustechs.ae/wp-content/uploads/2026/04/logo-002.png" alt="Haus Techs" width="160" height="40"></a>
+  <a class="brand" href="https://haustechs.ae" aria-label="Haus Techs">{LOGO_L}{LOGO_D}</a>
   <div class="nav-actions">
     <a class="nav-tel" href="tel:{CONTACT['tel']}" aria-label="{t['call']} {CONTACT['tel_disp']}">{ico('phone')}<span dir="ltr">{CONTACT['tel_disp']}</span></a>
     <a class="btn btn-sm" href="#quote"><span>{t['nav_cta']}</span><span class="orb">{ico('arrow-right', 'flip')}</span></a>
@@ -170,6 +194,11 @@ def form(p, t, fid, compact=False):
     msg = "" if compact else f"""
       <div class="field full"><label for="{fid}-message">{t['message']}{star(False)}</label>
         <textarea id="{fid}-message" name="message" placeholder="{e(f.get('message_ph', t['message_ph']))}"></textarea></div>"""
+    if compact:
+        wa_btn = f'<button class="wa-alt" type="button" data-wa-form>{ico("whatsapp-logo")}{t["send_wa"]}</button>'
+    else:
+        wa_btn = (f'<div class="or">{t["or"]}</div><button class="btn btn-light" type="button" data-wa-form>'
+                  f'<span>{t["send_wa"]}</span><span class="orb">{ico("whatsapp-logo")}</span></button>')
     hidden_first = p.get("hidden_order") == "source-first"
     hid_subject = f'<input type="hidden" name="subject" value="{e(p["subject"])}">'
     hid_source = f'<input type="hidden" name="source" value="{e(p["source"])}">'
@@ -198,8 +227,7 @@ def form(p, t, fid, compact=False):
     </div>
     <div class="form-actions">
       <button class="btn" type="submit"><span>{t['submit']}</span><span class="orb"><span class="spin" aria-hidden="true"></span>{ico('arrow-right', 'flip')}</span></button>
-      <div class="or">{t['or']}</div>
-      <button class="btn btn-light" type="button" data-wa-form><span>{t['send_wa']}</span><span class="orb">{ico('whatsapp-logo')}</span></button>
+      {wa_btn}
     </div>
     <p class="form-note">{t['form_note']}</p>
   </form>"""
@@ -210,26 +238,37 @@ def hero(p, t):
     rating = ""
     if t["rating"]:
         g = '<a href="https://www.google.com/search?q=haus+techs+dubai+reviews" target="_blank" rel="noopener">Google</a>'
-        rating = f'<p class="hero-rating rv" style="--d:4"><span class="stars" aria-hidden="true">{ico("star") * 5}</span><span>{t["rating"].format(who=e(p.get("rating_who", "")), google=g)}</span></p>'
-    form_html = f'<div class="hero-form shell rv" style="--d:3"><div class="core">{form(p, t, "f1", compact=True)}</div></div>' if p.get("hero_form", True) else ""
-    return f"""<section class="hero" aria-labelledby="h1">
+        rating = f'<p class="hero-rating hx" style="--d:5"><span class="stars" aria-hidden="true">{ico("star") * 5}</span><span>{t["rating"].format(who=e(p.get("rating_who", "")), google=g)}</span></p>'
+    slides = h.get("slides") or [(h["img"], "", h["img_alt"])]
+    imgs, dots = [], []
+    for i, (src, kind, label) in enumerate(slides):
+        on = " is-on" if i == 0 else ""
+        alt = f"{label}, {kind}" if kind else label
+        imgs.append(f'<div class="hs-slide{on}" data-i="{i}">{img(src, alt, lazy=(i > 0), sizes="100vw")}</div>')
+        real = kind and kind.lower().startswith(("delivered", "مشروع"))
+        dots.append(f'<button type="button" class="hs-dot{on}" data-go="{i}" aria-label="{e(label)}"><span class="hs-bar"><i></i></span>'
+                    f'<span class="hs-meta"><em class="{"k-real" if real else "k-concept"}">{e(kind)}</em>{e(label)}</span></button>')
+    form_html = f'<div class="hero-form shell hx" style="--d:4"><div class="core">{form(p, t, "f1", compact=True)}</div></div>' if p.get("hero_form", True) else ""
+    return f"""<section class="hero{' has-form' if form_html else ''}" aria-labelledby="h1">
   <span id="top-sentinel" style="position:absolute;top:0;height:1px;width:1px" aria-hidden="true"></span>
+  <div class="hs" data-slider aria-roledescription="carousel" aria-label="{e(h['kicker'])}">
+    <div class="hs-track" data-parallax="0.18">{''.join(imgs)}</div>
+    <div class="hs-scrim" aria-hidden="true"></div>
+  </div>
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <p class="kicker rv">{e(h['kicker'])}</p>
-      <h1 id="h1" class="rv" style="--d:1">{e(h['h1a'])}<span class="it">{e(h['h1b'])}</span></h1>
-      <p class="lede rv" style="--d:2">{e(h['sub'])}</p>
-      <div class="hero-ctas rv" style="--d:3">
-        <a class="btn" href="{e(p['wa_url'])}" target="_blank" rel="noopener">{t['wa_cta']}<span class="orb">{ico('whatsapp-logo')}</span></a>
-        <a class="link" href="#calculator">{t['calc_cta']} {ico('arrow-right', 'flip')}</a>
+      <p class="kicker hx" style="--d:0">{e(h['kicker'])}</p>
+      <h1 id="h1" class="hero-h"><span class="ln"><span>{e(h['h1a'])}</span></span><span class="ln it"><span>{e(h['h1b'])}</span></span></h1>
+      <p class="lede hx" style="--d:3">{e(h['sub'])}</p>
+      <div class="hero-ctas hx" style="--d:4">
+        <a class="btn btn-gold mag" href="{e(p['wa_url'])}" target="_blank" rel="noopener">{t['wa_cta']}<span class="orb">{ico('whatsapp-logo')}</span></a>
+        <a class="link link-light" href="#calculator">{t['calc_cta']} {ico('arrow-right', 'flip')}</a>
       </div>
       {rating}
     </div>
-    <div class="hero-visual">
-      <div class="brackets"><div class="hero-photo rv">{img(h['img'], h['img_alt'], lazy=False, w=1200, h=1000)}</div></div>
-      {form_html}
-    </div>
+    {form_html}
   </div>
+  <div class="hs-nav wrap hx" style="--d:6">{''.join(dots)}</div>
 </section>"""
 
 
@@ -261,7 +300,7 @@ def calculator(p, t):
   <div class="wrap calc-grid">
     <div>
       <p class="kicker rv">{e(c['kicker'])}</p>
-      <h2 id="calc-h" class="rv" style="--d:1">{t['calc_h']}</h2>
+      {heading(t['calc_h_a'], t['calc_h_b'], hid='calc-h')}
       <p class="lede rv" style="--d:2">{t['calc_lede']}</p>
       <ul class="ticks rv" style="--d:3">{ticks}</ul>
     </div>
@@ -296,10 +335,13 @@ def included(p, t):
         return ""
     tiles = []
     for i, (src, alt, h3, desc) in enumerate(s["tiles"]):
-        tiles.append(f"""<article class="tile rv" style="--d:{i % 3}">{img(src, alt)}<div class="tx"><h3>{e(h3)}</h3><p>{e(desc)}</p></div></article>""")
+        if src:
+            tiles.append(f"""<article class="tile rvi" style="--d:{i % 3}">{img(src, alt)}<div class="tx"><h3>{e(h3)}</h3><p>{e(desc)}</p></div></article>""")
+        else:
+            tiles.append(f"""<article class="tile plain rv" style="--d:{i % 3}"><span class="tile-ico">{ico('check')}</span><div class="tx"><h3>{e(h3)}</h3><p>{e(desc)}</p></div></article>""")
     return f"""<section class="sec" aria-labelledby="inc-h">
   <div class="wrap">
-    <div class="head"><h2 id="inc-h" class="rv">{e(s['h2'])}</h2><p class="lede rv" style="--d:1">{e(s['lede'])}</p></div>
+    <div class="head">{heading(e(s['h2']), hid='inc-h')}<p class="lede rv" style="--d:1">{e(s['lede'])}</p></div>
     <div class="bento">{''.join(tiles)}</div>
   </div>
 </section>"""
@@ -312,7 +354,7 @@ def communities(p, t):
     items = "".join(f'<div class="comm rv" style="--d:{i % 2}"><h3>{e(a)}</h3><p>{e(b)}</p></div>' for i, (a, b) in enumerate(s["items"]))
     return f"""<section class="sec" aria-labelledby="comm-h">
   <div class="wrap">
-    <div class="head"><h2 id="comm-h" class="rv">{e(s['h2a'])}<span class="it">{e(s['h2b'])}</span></h2><p class="lede rv" style="--d:1">{e(s['lede'])}</p></div>
+    <div class="head">{heading(e(s['h2a']), e(s['h2b']), hid='comm-h')}<p class="lede rv" style="--d:1">{e(s['lede'])}</p></div>
     <div class="comms">{items}</div>
   </div>
 </section>"""
@@ -327,7 +369,8 @@ def sectors(p, t):
         sel = i == 0
         tabs.append(f'<button role="tab" id="tab-{sec["id"]}" aria-controls="pan-{sec["id"]}" aria-selected="{str(sel).lower()}" tabindex="{0 if sel else -1}">{e(sec["tab"])}</button>')
         items = "".join(
-            f'<div class="sector-item">{img(src, alt)}<div class="tx"><h3>{e(h3)}</h3>{f"<p>{e(d)}</p>" if d else ""}</div></div>'
+            (f'<div class="sector-item">{img(src, alt)}<div class="tx"><h3>{e(h3)}</h3>{f"<p>{e(d)}</p>" if d else ""}</div></div>' if src else
+             f'<div class="sector-item no-img"><span class="tile-ico">{ico("check")}</span><div class="tx"><h3>{e(h3)}</h3>{f"<p>{e(d)}</p>" if d else ""}</div></div>')
             for src, alt, h3, d in sec["items"]
         )
         panels.append(f"""<div class="panel" role="tabpanel" id="pan-{sec['id']}" aria-labelledby="tab-{sec['id']}"{'' if sel else ' hidden'}>
@@ -335,7 +378,7 @@ def sectors(p, t):
     </div>""")
     return f"""<section class="sec" id="offices" aria-labelledby="sec-h">
   <div class="wrap">
-    <div class="head"><h2 id="sec-h" class="rv">{e(s['h2'])}</h2><p class="lede rv" style="--d:1">{e(s['lede'])}</p></div>
+    <div class="head">{heading(e(s['h2']), hid='sec-h')}<p class="lede rv" style="--d:1">{e(s['lede'])}</p></div>
     <div class="tabs rv" role="tablist" aria-label="{e(s['h2'])}">{''.join(tabs)}</div>
     {''.join(panels)}
   </div>
@@ -357,7 +400,7 @@ def journey(p, t):
       <div class="jroles"><div><b>{t['you_do']}</b>{e(st['you'])}</div><div class="we"><b>{t['we_do']}</b>{e(st['we'])}</div></div>{jphotos(st)}</div></div>""")
     return f"""<section class="sec journey" id="journey" aria-labelledby="j-h">
   <div class="wrap">
-    <div class="head"><p class="kicker rv">{t['j_kicker']}</p><h2 id="j-h" class="rv" style="--d:1">{t['j_h2a']}<span class="it">{t['j_h2b']}</span></h2><p class="lede rv" style="--d:2">{t['j_lede']}</p></div>
+    <div class="head"><p class="kicker rv">{t['j_kicker']}</p>{heading(t['j_h2a'], t['j_h2b'], hid='j-h')}<p class="lede rv" style="--d:2">{t['j_lede']}</p></div>
     <div class="jgrid"><div class="jline" aria-hidden="true"><div class="jfill"></div></div>{''.join(steps)}</div>
   </div>
 </section>"""
@@ -368,12 +411,12 @@ def work(p, t):
     if PREVIEW:
         w = dict(w, figs=[f for f in w["figs"] if f[0].startswith("work/")] or w["figs"])
     figs = "".join(
-        f'<figure><button class="ph" type="button" aria-label="{t["view"]}: {e(cap)}">{img(src, alt or cap, sizes="(max-width: 760px) 78vw, 420px")}</button><figcaption>{e(cap)}</figcaption></figure>'
+        f'<figure class="rvi"><button class="ph" type="button" aria-label="{t["view"]}: {e(cap)}">{img(src, alt or cap, sizes="(max-width: 760px) 78vw, 420px")}</button><figcaption>{e(cap)}</figcaption></figure>'
         for src, cap, alt in w["figs"]
     )
     return f"""<section class="sec" id="work" aria-labelledby="w-h" data-rail>
   <div class="wrap rail-head">
-    <div class="head"><h2 id="w-h" class="rv">{e(w['h2'])}</h2><p class="lede rv" style="--d:1">{e(w['lede'])}</p></div>
+    <div class="head">{heading(e(w['h2']), hid='w-h')}<p class="lede rv" style="--d:1">{e(w['lede'])}</p></div>
     <div class="rail-nav"><button type="button" data-prev aria-label="{t['prev']}">{ico('caret-left', 'flip')}</button><button type="button" data-next aria-label="{t['next']}">{ico('caret-right', 'flip')}</button></div>
   </div>
   <div class="rail" tabindex="0" aria-label="{e(w['h2'])}">{figs}</div>
@@ -400,7 +443,7 @@ def before_after(p, t):
     return f"""<section class="sec ba" aria-labelledby="ba-h">
   <div class="wrap ba-grid">
     <div>
-      <h2 id="ba-h" class="rv">{e(ba['h2a'])}<span class="it">{e(ba['h2b'])}</span></h2>
+      {heading(e(ba['h2a']), e(ba['h2b']), hid='ba-h')}
       <p class="lede rv" style="--d:1">{e(ba['lede'])}</p>
       <div class="seg ba-tabs rv" style="--d:2" role="group" aria-label="{e(ba['h2a'])}">{''.join(tabs)}</div>
       <p class="ba-note rv" style="--d:3">{e(ba['note'])}</p>
@@ -415,12 +458,12 @@ def concepts(p, t):
     if not c:
         return ""
     figs = "".join(
-        f'<figure class="cg-{i}"><button class="ph" type="button" aria-label="{t["view"]}: {e(cap)}">{img(src, cap, sizes="(max-width: 760px) 92vw, 40vw")}</button><figcaption>{e(cap)}</figcaption></figure>'
+        f'<figure class="cg-{i} rvi"><button class="ph" type="button" aria-label="{t["view"]}: {e(cap)}">{img(src, cap, sizes="(max-width: 760px) 92vw, 40vw")}</button><figcaption>{e(cap)}</figcaption></figure>'
         for i, (src, cap) in enumerate(c["figs"])
     )
     return f"""<section class="sec concepts" aria-labelledby="cg-h">
   <div class="wrap">
-    <div class="head"><h2 id="cg-h" class="rv">{e(c['h2a'])}<span class="it">{e(c['h2b'])}</span></h2><p class="lede rv" style="--d:1">{e(c['lede'])}</p></div>
+    <div class="head">{heading(e(c['h2a']), e(c['h2b']), hid='cg-h')}<p class="lede rv" style="--d:1">{e(c['lede'])}</p></div>
     <div class="cgrid rv">{figs}</div>
   </div>
 </section>"""
@@ -432,9 +475,9 @@ def video(p, t):
         return ""
     return f"""<section class="sec-tight" aria-labelledby="v-hd" style="padding-bottom:var(--sec)">
   <div class="wrap vid-grid">
-    <div><h2 id="v-hd" class="rv">{e(v['h2a'])}<span class="it">{e(v['h2b'])}</span></h2><p class="lede rv" style="--d:1">{e(v['lede'])}</p></div>
+    <div>{heading(e(v['h2a']), e(v['h2b']), hid='v-hd')}<p class="lede rv" style="--d:1">{e(v['lede'])}</p></div>
     <div class="vid rv" style="--d:1" data-drive="{e(v['drive_id'])}">
-      {img(v['poster'], v['poster_alt'], sizes='(max-width: 760px) 92vw, 50vw')}
+      {img(v['poster'], v['poster_alt'], sizes='(max-width: 760px) 92vw, 50vw') if v.get('poster') else '<div class="vid-poster" aria-hidden="true"><img src="lp-assets/brand/crest-dark.png" alt=""><span>Shoreline Apartments<br><i>Palm Jumeirah</i></span></div>'}
       <button type="button" class="vid-play" aria-label="{t['play']}: {e(v['h2a'])}"><span>{ico('caret-right')}</span>{t['play']}</button>
     </div>
   </div>
@@ -451,7 +494,7 @@ def reviews(p, t):
       <figcaption><div><b>{e(name)}</b><span>{t['g_review']}</span></div>{ico('google-logo', 'g')}</figcaption></figure>""")
     return f"""<section class="sec-tight" aria-labelledby="r-h" style="padding-bottom:var(--sec)">
   <div class="wrap">
-    <div class="head"><h2 id="r-h" class="rv">{e(r['h2'])}</h2></div>
+    <div class="head">{heading(e(r['h2']), hid='r-h')}</div>
     <div class="reviews">{''.join(cards)}</div>
   </div>
 </section>"""
@@ -463,9 +506,9 @@ def band(p, t):
         return ""
     gains = "".join(f'<div class="gain rv" style="--d:{i}"><b>{e(a)}</b><span>{e(c)}</span></div>' for i, (a, c) in enumerate(b["gains"]))
     return f"""<section class="band" aria-labelledby="b-h">
-  {img(b['img'], b['img_alt'])}
+  <div class="band-img" data-parallax="-0.12">{img(b['img'], b['img_alt'], sizes='100vw')}</div>
   <div class="wrap">
-    <h2 id="b-h" class="rv">{e(b['h2a'])}<span class="it">{e(b['h2b'])}</span></h2>
+    {heading(e(b['h2a']), e(b['h2b']), hid='b-h')}
     <p class="rv" style="--d:1">{e(b['p'])}</p>
     <a class="btn rv" style="--d:2" href="#quote"><span>{t['nav_cta']}</span><span class="orb">{ico('arrow-right', 'flip')}</span></a>
     <h3 class="rv" style="margin-top:clamp(72px,9vw,120px);color:var(--cream)">{e(b['gains_h'])}</h3>
@@ -479,7 +522,7 @@ def versus(p, t):
     new = "".join(f"<li>{ico('check')}<span>{e(x)}</span></li>" for x in t["v_new"])
     return f"""<section class="sec" aria-labelledby="v-h">
   <div class="wrap">
-    <div class="head"><h2 id="v-h" class="rv">{t['v_h2']}</h2><p class="lede rv" style="--d:1">{t['v_lede']}</p></div>
+    <div class="head">{heading(t['v_h2'], hid='v-h')}<p class="lede rv" style="--d:1">{t['v_lede']}</p></div>
     <div class="versus">
       <div class="vcol v-old rv"><h3>{t['v_old_h']}</h3><ul>{old}</ul></div>
       <div class="vcol v-new rv" style="--d:1"><h3>{t['v_new_h']}</h3><ul>{new}</ul></div>
@@ -505,7 +548,7 @@ def quote(p, t):
   <div class="wrap quote-grid">
     <div>
       <p class="kicker rv">{t['q_kicker']}</p>
-      <h2 id="q-h" class="rv" style="--d:1">{e(q['h2'])}</h2>
+      {heading(e(q['h2']), hid='q-h')}
       <p class="lede rv" style="--d:2">{t['q_lede']}</p>
       <div class="contacts rv" style="--d:3">{rows}</div>
     </div>
@@ -521,7 +564,7 @@ def faq(p, t):
     qa = "".join(f'<div class="qa rv"><h3>{e(q)}</h3><p>{e(a)}</p></div>' for q, a in f)
     return f"""<section class="sec" aria-labelledby="faq-h">
   <div class="wrap">
-    <div class="head"><h2 id="faq-h" class="rv">{t['faq_h']}</h2></div>
+    <div class="head">{heading(t['faq_h'], hid='faq-h')}</div>
     <div class="faq">{qa}</div>
   </div>
 </section>"""
@@ -530,7 +573,7 @@ def faq(p, t):
 def final(p, t):
     return f"""<section class="sec final" aria-labelledby="fin-h" style="padding-top:calc(var(--sec)*.4)">
   <div class="wrap">
-    <h2 id="fin-h" class="rv">{e(p['final'])}</h2>
+    {heading(e(p['final']), hid='fin-h')}
     <p class="lede rv" style="--d:1">{t['final_lede']}</p>
     <div class="hero-ctas rv" style="--d:2">
       <a class="btn" href="{e(p['wa_url'])}" target="_blank" rel="noopener">{t['wa_cta']}<span class="orb">{ico('whatsapp-logo')}</span></a>
@@ -544,7 +587,7 @@ def footer(p, t):
     return f"""<footer class="foot">
   <div class="wrap">
     <div class="foot-grid">
-      <div><img class="logo" src="https://haustechs.ae/wp-content/uploads/2026/04/logo-002.png" alt="Haus Techs" width="184" height="46" loading="lazy">
+      <div><img class="logo" src="lp-assets/brand/logo-dark.png" srcset="lp-assets/brand/logo-dark.png 1x, lp-assets/brand/logo-dark@2x.png 2x" alt="Haus Techs" width="247" height="96" loading="lazy">
         <address>{t['company']}<br>{t['address']}</address></div>
       <div class="foot-links">
         <a href="tel:{CONTACT['tel']}">{ico('phone')}<span dir="ltr">{CONTACT['tel_disp']}</span></a>
@@ -596,9 +639,8 @@ def finish(html_s):
     if not PREVIEW:
         return html_s
     html_s = html_s.replace(GTM_NOSCRIPT, "")
-    html_s = re.sub(r'<img class="logo" src="https://haustechs\.ae[^>]*>', '<span class="logo-txt">HAUS <i>TECHS</i></span>', html_s)
-    html_s = re.sub(r'<img src="https://haustechs\.ae/wp-content/uploads/2026/04/logo-002\.png"[^>]*>', '<span class="logo-txt">HAUS <i>TECHS</i></span>', html_s)
     html_s = html_s.replace("window.HT = {", "window.HT = {\"preview\": true, ")
+    html_s = re.sub(r"<!-- Event snippet for conversion page -->\s*<script>.*?</script>", "<!-- conversion tag removed in preview -->", html_s, flags=re.S)
     html_s = html_s.replace("<body>", '<body>\n<div class="pv-bar">Preview. Forms are not sent and tracking is off. <a href="index.html">All pages</a></div>', 1)
     html_s = html_s.replace('<body class="ty">', '<body class="ty">\n<div class="pv-bar">Preview. <a href="index.html">All pages</a></div>', 1)
     return html_s
@@ -632,7 +674,7 @@ def build_thank_you(p):
 {GTM_NOSCRIPT}
 {icon_sprite()}
 <main id="main" class="wrap" style="min-height:100dvh;display:grid;align-content:center;justify-items:start;padding-block:64px">
-  <a href="https://haustechs.ae"><img src="https://haustechs.ae/wp-content/uploads/2026/04/logo-002.png" alt="Haus Techs" width="184" height="46" style="height:46px;width:auto"></a>
+  <a href="https://haustechs.ae"><img src="lp-assets/brand/logo-dark.png" srcset="lp-assets/brand/logo-dark.png 1x, lp-assets/brand/logo-dark@2x.png 2x" alt="Haus Techs" width="247" height="96" style="height:56px;width:auto"></a>
   <div class="brackets" style="margin-top:clamp(56px,9vw,96px);padding:clamp(28px,5vw,56px) clamp(4px,2vw,24px);max-width:760px">
     <h1 style="max-width:16ch">{e(p['h1a'])}<span class="it">{e(p['h1b'])}</span></h1>
     <p class="lede">{e(p['p'])}</p>
@@ -662,10 +704,13 @@ def main():
     for fn in ("haus.css", "haus.js"):
         shutil.copy(os.path.join(SRC, fn), os.path.join(DIST, "lp-assets", fn))
     shutil.copytree(os.path.join(SRC, "work"), os.path.join(DIST, "lp-images", "work"))
+    shutil.copytree(os.path.join(SRC, "brand"), os.path.join(DIST, "lp-assets", "brand"))
     for p in PAGES:
         open(os.path.join(DIST, p["file"]), "w", encoding="utf-8").write(finish(build_page(p)))
         print("built", p["file"])
     open(os.path.join(DIST, THANK_YOU["file"]), "w", encoding="utf-8").write(finish(build_thank_you(THANK_YOU)))
+    if PREVIEW:
+        shutil.copy(os.path.join(SRC, "preview-index.html"), os.path.join(DIST, "index.html"))
     print("built", THANK_YOU["file"])
 
 

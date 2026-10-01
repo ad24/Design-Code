@@ -5,6 +5,7 @@
   'use strict';
   var HT = window.HT || {};
   var doc = document.documentElement;
+  var lb = document.getElementById('lb');
   var RM = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   doc.classList.add('js');
 
@@ -13,11 +14,99 @@
   function track(ev, data) { try { (window.dataLayer = window.dataLayer || []).push(Object.assign({ event: ev }, data || {})); } catch (e) {} }
   function wa(text) { return 'https://wa.me/' + HT.wa + '?text=' + encodeURIComponent(text); }
 
-  /* nav turns solid once the hero top has scrolled away (sentinel instead of scroll events) */
-  var nav = $('.nav'), sentinel = $('#top-sentinel');
-  if (nav && sentinel && 'IntersectionObserver' in window) {
-    new IntersectionObserver(function (es) { nav.classList.toggle('solid', !es[0].isIntersecting); }).observe(sentinel);
+  /* hero intro plays once the first slide image is ready */
+  var markLoaded = function () { doc.classList.add('loaded'); };
+  var first = $('.hs-slide.is-on img');
+  if (first && !first.complete) { first.addEventListener('load', markLoaded); setTimeout(markLoaded, 1200); } else { requestAnimationFrame(markLoaded); }
+
+  /* nav: light logo over the dark hero, solid cream once the hero has scrolled away */
+  var nav = $('.nav'), heroEl = $('.hero');
+  if (nav && heroEl && 'IntersectionObserver' in window) {
+    nav.classList.add('on-dark');
+    new IntersectionObserver(function (es) {
+      var r = es[0];
+      var over = r.isIntersecting && r.boundingClientRect.bottom > 90;
+      nav.classList.toggle('on-dark', over); nav.classList.toggle('solid', !over);
+    }, { threshold: [0, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1], rootMargin: '-80px 0px 0px 0px' }).observe(heroEl);
   }
+
+  /* ---------- hero slider ---------- */
+  $$('[data-slider]').forEach(function (hs) {
+    var hero = hs.closest('.hero'), slides = $$('.hs-slide', hs), dots = $$('.hs-dot', hero), n = slides.length, i = 0, timer = null, DUR = 6500;
+    if (hero) hero.style.setProperty('--n', n);
+    if (n < 2) { dots.forEach(function (d) { d.hidden = true; }); return; }
+    hero.style.setProperty('--dur', DUR + 'ms');
+    var go = function (k, user) {
+      i = (k + n) % n;
+      slides.forEach(function (s, x) { s.classList.toggle('is-on', x === i); var im = $('img', s); if (x === i && im.loading === 'lazy') im.loading = 'eager'; });
+      dots.forEach(function (d, x) { d.classList.remove('is-on'); if (x === i) { void d.offsetWidth; d.classList.add('is-on'); } d.setAttribute('aria-current', String(x === i)); });
+      var nx = $('img', slides[(i + 1) % n]); if (nx && nx.loading === 'lazy') nx.loading = 'eager';
+      if (user) track('ht_hero_slide', { page: HT.page, slide: i });
+      restart();
+    };
+    var restart = function () { clearTimeout(timer); if (!RM && !hero.classList.contains('paused')) timer = setTimeout(function () { go(i + 1); }, DUR); };
+    dots.forEach(function (d, x) { d.addEventListener('click', function () { go(x, true); }); });
+    hero.addEventListener('mouseenter', function () { if (matchMedia('(hover: hover)').matches) { hero.classList.add('paused'); clearTimeout(timer); } });
+    hero.addEventListener('mouseleave', function () { hero.classList.remove('paused'); restart(); });
+    document.addEventListener('visibilitychange', function () { if (document.hidden) clearTimeout(timer); else restart(); });
+    var sx = null;
+    hs.parentNode.addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; }, { passive: true });
+    hs.parentNode.addEventListener('touchend', function (e) {
+      if (sx === null) return; var dx = e.changedTouches[0].clientX - sx; sx = null;
+      if (Math.abs(dx) > 50 && !e.target.closest('form')) go(i + ((dx < 0) !== !!HT.rtl ? 1 : -1), true);
+    }, { passive: true });
+    hero.addEventListener('keydown', function (e) {
+      if (!e.target.closest('.hs-nav')) return;
+      if (e.key === 'ArrowRight') go(i + (HT.rtl ? -1 : 1), true);
+      if (e.key === 'ArrowLeft') go(i + (HT.rtl ? 1 : -1), true);
+    });
+    go(0);
+  });
+
+  /* ---------- parallax (transform only, one rAF per frame) ---------- */
+  var px = $$('[data-parallax]');
+  if (px.length && !RM) {
+    var ticking = false;
+    var paint = function () {
+      ticking = false;
+      var vh = innerHeight;
+      px.forEach(function (el) {
+        var r = el.parentNode.getBoundingClientRect();
+        if (r.bottom < -200 || r.top > vh + 200) return;
+        var k = parseFloat(el.getAttribute('data-parallax'));
+        var c = (r.top + r.height / 2) - vh / 2;
+        el.style.transform = 'translate3d(0,' + (c * k).toFixed(1) + 'px,0)';
+      });
+    };
+    addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(paint); } }, { passive: true });
+    addEventListener('resize', paint); paint();
+  }
+
+  /* ---------- magnetic buttons + photo cursor (fine pointers only) ---------- */
+  if (!RM && matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    $$('.btn').forEach(function (b) {
+      b.addEventListener('pointermove', function (e) {
+        var r = b.getBoundingClientRect();
+        b.style.transform = 'translate(' + ((e.clientX - r.left - r.width / 2) * .14).toFixed(1) + 'px,' + ((e.clientY - r.top - r.height / 2) * .22).toFixed(1) + 'px)';
+      });
+      b.addEventListener('pointerleave', function () { b.style.transform = ''; });
+    });
+    var cur = document.createElement('div'); cur.className = 'cur'; cur.setAttribute('aria-hidden', 'true'); cur.textContent = HT.rtl ? 'عرض' : 'View'; document.body.appendChild(cur);
+    document.addEventListener('pointermove', function (e) {
+      cur.style.setProperty('--x', e.clientX + 'px'); cur.style.setProperty('--y', e.clientY + 'px');
+      cur.classList.toggle('on', !!(e.target.closest && e.target.closest('button.ph')) && !(lb && lb.classList.contains('open')));
+    }, { passive: true });
+  }
+
+  /* ---------- drag-to-scroll galleries with the mouse ---------- */
+  $$('.rail').forEach(function (rail) {
+    var down = false, x0 = 0, s0 = 0, moved = false;
+    rail.addEventListener('pointerdown', function (e) { if (e.pointerType !== 'mouse') return; down = true; moved = false; x0 = e.clientX; s0 = rail.scrollLeft; });
+    addEventListener('pointermove', function (e) { if (!down) return; var dx = e.clientX - x0; if (Math.abs(dx) > 6) { moved = true; rail.classList.add('drag'); } rail.scrollLeft = s0 - dx; });
+    addEventListener('pointerup', function () { if (!down) return; down = false; setTimeout(function () { rail.classList.remove('drag'); }, 0); });
+    rail.addEventListener('click', function (e) { if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; } }, true);
+  });
+
 
   /* mobile action bar appears after the hero, hides again while the quote form is on screen */
   var bar = $('.mbar'), hero = $('.hero'), quote = $('#quote');
@@ -29,7 +118,7 @@
   }
 
   /* reveal on enter, once */
-  var rv = $$('.rv');
+  var rv = $$('.rv, .rvm, .rvi');
   if (!RM && 'IntersectionObserver' in window) {
     var io = new IntersectionObserver(function (es) {
       es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
@@ -191,7 +280,6 @@
   });
 
   /* ---------- lightbox ---------- */
-  var lb = $('#lb');
   if (lb) {
     var lbImg = $('img', lb), lbCap = $('p', lb), lastFocus = null;
     var close = function () { lb.classList.remove('open'); lb.setAttribute('aria-hidden', 'true'); document.body.style.overflow = ''; if (lastFocus) lastFocus.focus(); };
@@ -237,6 +325,21 @@
       var set = function () { var v = HT.rtl ? 100 - r.value : r.value; stage.style.setProperty('--pos', v + '%'); };
       r.addEventListener('input', set); set();
     });
+    if (!RM && 'IntersectionObserver' in window) {
+      var hint = new IntersectionObserver(function (es) {
+        if (!es[0].isIntersecting) return; hint.disconnect();
+        var r = $('.ba-pane:not([hidden]) .ba-range', sec); if (!r) return;
+        var keys = [50, 22, 78, 50], k = 0, from = 50, t0 = null;
+        var step = function (t) {
+          if (!t0) t0 = t; var p = Math.min((t - t0) / 700, 1), ease = 1 - Math.pow(1 - p, 3);
+          r.value = from + (keys[k + 1] - from) * ease; r.dispatchEvent(new Event('input'));
+          if (p < 1) return requestAnimationFrame(step);
+          k++; from = keys[k]; t0 = null; if (k < keys.length - 1) requestAnimationFrame(step);
+        };
+        setTimeout(function () { requestAnimationFrame(step); }, 500);
+      }, { threshold: 0.5 });
+      hint.observe(sec);
+    }
     $$('[data-ba]', sec).forEach(function (b) {
       b.addEventListener('click', function () {
         var i = b.getAttribute('data-ba');

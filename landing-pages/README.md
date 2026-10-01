@@ -17,7 +17,7 @@ Upload everything inside `dist/` to the site root, next to the existing `lp-imag
 
 ```
 dist/*.html          -> site root (replaces the current pages)
-dist/lp-assets/      -> site root /lp-assets/ (new: shared CSS + JS)
+dist/lp-assets/      -> site root /lp-assets/ (new: shared CSS + JS, plus brand/ with the logo and favicons)
 dist/lp-images/work/ -> site root /lp-images/work/ (new: project photos, keep the existing lp-images/ files)
 ```
 
@@ -53,6 +53,10 @@ and upload `dist/` again. Bump `ASSET_VER` in `build.py` when the CSS/JS changes
 
 The Palm page plays the Shoreline Apartments video from Google Drive (the Drive file must stay shared as "Anyone with the link").
 
-To use new project photos: upload them to `lp-images/` on the server (or the WordPress media library) and change the image paths in `pages.py`.
+To use new project photos: add them to `src/work/` (1600px plus an 800px `-sm` copy), change the image paths in `pages.py` and rebuild.
+
+The logo and favicons live in `src/brand/` and are copied to `dist/lp-assets/brand/`.
+
+`PREVIEW=1 python3 build.py` writes a `preview/` copy with tracking removed and forms disabled, for reviewing pages before upload.
 
 Icons: Phosphor Icons (MIT), see `src/icons/LICENSE-phosphor.txt`.
