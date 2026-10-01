@@ -40,3 +40,4 @@ _site/
 ### Sass ###
 .sass-cache
 *.css.map
+landing-pages/preview/
