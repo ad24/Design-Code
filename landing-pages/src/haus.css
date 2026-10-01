@@ -605,3 +605,9 @@ input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.12); }
 @media (max-width: 760px) { [dir="rtl"] .jline { right: 19.5px; } [dir="rtl"] .stat:nth-child(odd) { padding-right: 0; border-right: 0; } }
 @media (prefers-reduced-motion: no-preference) { [dir="rtl"] .mq-track { animation-name: mq-rtl; } }
 @keyframes mq-rtl { to { transform: translateX(50%); } }
+
+/* preview-only helpers (unused on the live pages) */
+.logo-txt { font: 500 15px/1 var(--sans); letter-spacing: .32em; color: var(--charcoal); white-space: nowrap; }
+.logo-txt i { font-style: normal; color: var(--gold); }
+.pv-bar { position: relative; z-index: 60; padding: 8px 16px; text-align: center; font-size: 12.5px; background: var(--charcoal); color: var(--cream); }
+.pv-bar a { color: #D2B577; }

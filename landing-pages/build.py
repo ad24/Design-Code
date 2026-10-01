@@ -20,6 +20,16 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(ROOT, "src")
 DIST = os.path.join(ROOT, "dist")
 ASSET_VER = "2"
+PREVIEW = os.environ.get("PREVIEW") == "1"
+POOL = ["c-villa-living-2", "c-villa-lounge", "c-apt-living", "c-villa-suite", "g17-bedroom-wardrobe", "v91-shower",
+        "c-omniyat-boardroom", "c-mazaya-lounge", "c-apt-bedroom", "v91-hall", "c-villa-bedroom", "g17-living"]
+
+
+def sub(src):
+    """Preview only: photos hosted on haustechs.ae can't load in the preview, so use a project photo instead."""
+    if not PREVIEW or src.startswith("work/"):
+        return src
+    return "work/" + POOL[sum(map(ord, src)) % len(POOL)]
 
 e = html.escape
 
@@ -73,6 +83,11 @@ FONTS_AR = FONTS_EN + "&family=Amiri:wght@400;700&family=IBM+Plex+Sans+Arabic:wg
 
 
 def head(p, extra=""):
+    if PREVIEW:
+        return head_real(p, extra).replace(TRACK_HEAD, "<!-- tracking removed in preview -->")
+
+
+def head_real(p, extra=""):
     fonts = FONTS_AR if p.get("rtl") else FONTS_EN
     hero = p.get("hero", {}).get("img")
     preload = f'<link rel="preload" as="image" href="{e(hero)}" fetchpriority="high">' if hero else ""
@@ -111,6 +126,7 @@ def work_dims(name):
 
 
 def img(src, alt, cls="", lazy=True, soft=False, w=None, h=None, sizes="(max-width: 760px) 92vw, 50vw"):
+    src = sub(src)
     if src.startswith("work/"):
         name = src[5:]
         w, h = work_dims(name)
@@ -349,6 +365,8 @@ def journey(p, t):
 
 def work(p, t):
     w = p["work"]
+    if PREVIEW:
+        w = dict(w, figs=[f for f in w["figs"] if f[0].startswith("work/")] or w["figs"])
     figs = "".join(
         f'<figure><button class="ph" type="button" aria-label="{t["view"]}: {e(cap)}">{img(src, alt or cap, sizes="(max-width: 760px) 78vw, 420px")}</button><figcaption>{e(cap)}</figcaption></figure>'
         for src, cap, alt in w["figs"]
@@ -571,6 +589,21 @@ HT.formWa = {p['form_wa_js']};
 <script src="lp-assets/haus.js?v={ASSET_VER}" defer></script>"""
 
 
+LOGO = '<img class="logo" src="https://haustechs.ae/wp-content/uploads/2026/04/logo-002.png" alt="Haus Techs" width="160" height="40">'
+
+
+def finish(html_s):
+    if not PREVIEW:
+        return html_s
+    html_s = html_s.replace(GTM_NOSCRIPT, "")
+    html_s = re.sub(r'<img class="logo" src="https://haustechs\.ae[^>]*>', '<span class="logo-txt">HAUS <i>TECHS</i></span>', html_s)
+    html_s = re.sub(r'<img src="https://haustechs\.ae/wp-content/uploads/2026/04/logo-002\.png"[^>]*>', '<span class="logo-txt">HAUS <i>TECHS</i></span>', html_s)
+    html_s = html_s.replace("window.HT = {", "window.HT = {\"preview\": true, ")
+    html_s = html_s.replace("<body>", '<body>\n<div class="pv-bar">Preview. Forms are not sent and tracking is off. <a href="index.html">All pages</a></div>', 1)
+    html_s = html_s.replace('<body class="ty">', '<body class="ty">\n<div class="pv-bar">Preview. <a href="index.html">All pages</a></div>', 1)
+    return html_s
+
+
 def build_page(p):
     t = p["T"]
     sections = [hero(p, t), proof(p, t), calculator(p, t)]
@@ -620,6 +653,9 @@ def build_thank_you(p):
 
 
 def main():
+    global DIST
+    if PREVIEW:
+        DIST = os.path.join(ROOT, "preview")
     if os.path.isdir(DIST):
         shutil.rmtree(DIST)
     os.makedirs(os.path.join(DIST, "lp-assets"))
@@ -627,9 +663,9 @@ def main():
         shutil.copy(os.path.join(SRC, fn), os.path.join(DIST, "lp-assets", fn))
     shutil.copytree(os.path.join(SRC, "work"), os.path.join(DIST, "lp-images", "work"))
     for p in PAGES:
-        open(os.path.join(DIST, p["file"]), "w", encoding="utf-8").write(build_page(p))
+        open(os.path.join(DIST, p["file"]), "w", encoding="utf-8").write(finish(build_page(p)))
         print("built", p["file"])
-    open(os.path.join(DIST, THANK_YOU["file"]), "w", encoding="utf-8").write(build_thank_you(THANK_YOU))
+    open(os.path.join(DIST, THANK_YOU["file"]), "w", encoding="utf-8").write(finish(build_thank_you(THANK_YOU)))
     print("built", THANK_YOU["file"])
 
 

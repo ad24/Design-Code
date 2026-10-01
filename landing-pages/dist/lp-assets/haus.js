@@ -157,6 +157,7 @@
     f.addEventListener('submit', function (e) {
       var bad = $$('.field', f).filter(function (fd) { return !check(fd); });
       if (bad.length) { e.preventDefault(); var el = $('input,select,textarea', bad[0]); el && el.focus(); return; }
+      if (HT.preview) { e.preventDefault(); var n = $('.form-note', f); if (n) n.textContent = 'Preview: the form checks passed. On the live site this goes to your project desk.'; return; }
       var b = $('button[type=submit]', f);
       b.classList.add('sending'); b.disabled = true;
       setTimeout(function () { b.disabled = false; b.classList.remove('sending'); }, 6000);
