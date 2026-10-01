@@ -100,7 +100,27 @@ def head(p, extra=""):
 </head>"""
 
 
-def img(src, alt, cls="", lazy=True, soft=False, w=None, h=None):
+WORK_DIMS = {}
+
+
+def work_dims(name):
+    if name not in WORK_DIMS:
+        from PIL import Image
+        WORK_DIMS[name] = Image.open(os.path.join(SRC, "work", name + ".jpg")).size
+    return WORK_DIMS[name]
+
+
+def img(src, alt, cls="", lazy=True, soft=False, w=None, h=None, sizes="(max-width: 760px) 92vw, 50vw"):
+    if src.startswith("work/"):
+        name = src[5:]
+        w, h = work_dims(name)
+        base = f"lp-images/work/{name}"
+        attrs = [f'src="{base}.jpg"', f'srcset="{base}-sm.jpg 800w, {base}.jpg {w}w"', f'sizes="{sizes}"',
+                 f'alt="{e(alt)}"', f'width="{w}" height="{h}"']
+        if cls:
+            attrs.append(f'class="{cls}"')
+        attrs.append('loading="lazy" decoding="async"' if lazy else 'fetchpriority="high" decoding="async"')
+        return "<img " + " ".join(attrs) + ">"
     attrs = [f'src="{e(src)}"', f'alt="{e(alt)}"']
     if cls:
         attrs.append(f'class="{cls}"')
@@ -306,12 +326,19 @@ def sectors(p, t):
 </section>"""
 
 
+def jphotos(st):
+    if not st.get("photos"):
+        return ""
+    figs = "".join(f'<figure>{img(src, alt, sizes="(max-width: 640px) 30vw, 180px")}</figure>' for src, alt in st["photos"])
+    return f'<div class="jphotos">{figs}</div><p class="jcap">{e(st.get("photos_cap", ""))}</p>'
+
+
 def journey(p, t):
     steps = []
     for i, st in enumerate(p.get("journey", t["journey"]), 1):
         when = f'<p class="jwhen">{e(st["when"])}</p>' if st.get("when") else ""
         steps.append(f"""<div class="jstep"><div class="jdot">{i}</div><div>{when}<h3>{e(st['h3'])}</h3><p>{e(st['p'])}</p>
-      <div class="jroles"><div><b>{t['you_do']}</b>{e(st['you'])}</div><div class="we"><b>{t['we_do']}</b>{e(st['we'])}</div></div></div></div>""")
+      <div class="jroles"><div><b>{t['you_do']}</b>{e(st['you'])}</div><div class="we"><b>{t['we_do']}</b>{e(st['we'])}</div></div>{jphotos(st)}</div></div>""")
     return f"""<section class="sec journey" id="journey" aria-labelledby="j-h">
   <div class="wrap">
     <div class="head"><p class="kicker rv">{t['j_kicker']}</p><h2 id="j-h" class="rv" style="--d:1">{t['j_h2a']}<span class="it">{t['j_h2b']}</span></h2><p class="lede rv" style="--d:2">{t['j_lede']}</p></div>
@@ -323,7 +350,7 @@ def journey(p, t):
 def work(p, t):
     w = p["work"]
     figs = "".join(
-        f'<figure><button class="ph" type="button" aria-label="{t["view"]}: {e(cap)}">{img(src, alt or cap)}</button><figcaption>{e(cap)}</figcaption></figure>'
+        f'<figure><button class="ph" type="button" aria-label="{t["view"]}: {e(cap)}">{img(src, alt or cap, sizes="(max-width: 760px) 78vw, 420px")}</button><figcaption>{e(cap)}</figcaption></figure>'
         for src, cap, alt in w["figs"]
     )
     return f"""<section class="sec" id="work" aria-labelledby="w-h" data-rail>
@@ -332,6 +359,67 @@ def work(p, t):
     <div class="rail-nav"><button type="button" data-prev aria-label="{t['prev']}">{ico('caret-left', 'flip')}</button><button type="button" data-next aria-label="{t['next']}">{ico('caret-right', 'flip')}</button></div>
   </div>
   <div class="rail" tabindex="0" aria-label="{e(w['h2'])}">{figs}</div>
+</section>"""
+
+
+def before_after(p, t):
+    ba = p.get("before_after")
+    if not ba:
+        return ""
+    tabs, panes = [], []
+    for i, (label, before, after, alt) in enumerate(ba["pairs"]):
+        sel = i == 0
+        tabs.append(f'<button type="button" data-ba="{i}" aria-pressed="{str(sel).lower()}">{e(label)}</button>')
+        panes.append(f"""<div class="ba-pane"{'' if sel else ' hidden'} data-pane="{i}">
+        <div class="ba-stage" style="--pos:50%">
+          {img(after, t['after'] + ': ' + alt, cls='ba-after', sizes='(max-width: 760px) 92vw, 560px')}
+          <div class="ba-before-wrap">{img(before, t['before'] + ': ' + alt, cls='ba-before', sizes='(max-width: 760px) 92vw, 560px')}</div>
+          <span class="ba-tag ba-tag-b">{t['before']}</span><span class="ba-tag ba-tag-a">{t['after']}</span>
+          <span class="ba-handle" aria-hidden="true">{ico('caret-left')}{ico('caret-right')}</span>
+          <input class="ba-range" type="range" min="0" max="100" value="50" aria-label="{t['ba_slider']}">
+        </div>
+      </div>""")
+    return f"""<section class="sec ba" aria-labelledby="ba-h">
+  <div class="wrap ba-grid">
+    <div>
+      <h2 id="ba-h" class="rv">{e(ba['h2a'])}<span class="it">{e(ba['h2b'])}</span></h2>
+      <p class="lede rv" style="--d:1">{e(ba['lede'])}</p>
+      <div class="seg ba-tabs rv" style="--d:2" role="group" aria-label="{e(ba['h2a'])}">{''.join(tabs)}</div>
+      <p class="ba-note rv" style="--d:3">{e(ba['note'])}</p>
+    </div>
+    <div class="rv" style="--d:1">{''.join(panes)}</div>
+  </div>
+</section>"""
+
+
+def concepts(p, t):
+    c = p.get("concepts")
+    if not c:
+        return ""
+    figs = "".join(
+        f'<figure class="cg-{i}"><button class="ph" type="button" aria-label="{t["view"]}: {e(cap)}">{img(src, cap, sizes="(max-width: 760px) 92vw, 40vw")}</button><figcaption>{e(cap)}</figcaption></figure>'
+        for i, (src, cap) in enumerate(c["figs"])
+    )
+    return f"""<section class="sec concepts" aria-labelledby="cg-h">
+  <div class="wrap">
+    <div class="head"><h2 id="cg-h" class="rv">{e(c['h2a'])}<span class="it">{e(c['h2b'])}</span></h2><p class="lede rv" style="--d:1">{e(c['lede'])}</p></div>
+    <div class="cgrid rv">{figs}</div>
+  </div>
+</section>"""
+
+
+def video(p, t):
+    v = p.get("video")
+    if not v:
+        return ""
+    return f"""<section class="sec-tight" aria-labelledby="v-hd" style="padding-bottom:var(--sec)">
+  <div class="wrap vid-grid">
+    <div><h2 id="v-hd" class="rv">{e(v['h2a'])}<span class="it">{e(v['h2b'])}</span></h2><p class="lede rv" style="--d:1">{e(v['lede'])}</p></div>
+    <div class="vid rv" style="--d:1" data-drive="{e(v['drive_id'])}">
+      {img(v['poster'], v['poster_alt'], sizes='(max-width: 760px) 92vw, 50vw')}
+      <button type="button" class="vid-play" aria-label="{t['play']}: {e(v['h2a'])}"><span>{ico('caret-right')}</span>{t['play']}</button>
+    </div>
+  </div>
 </section>"""
 
 
@@ -486,8 +574,8 @@ HT.formWa = {p['form_wa_js']};
 def build_page(p):
     t = p["T"]
     sections = [hero(p, t), proof(p, t), calculator(p, t)]
-    sections += [sectors(p, t), communities(p, t), included(p, t), journey(p, t), work(p, t),
-                 reviews(p, t), band(p, t), versus(p, t), quote(p, t), faq(p, t), final(p, t)]
+    sections += [sectors(p, t), communities(p, t), included(p, t), before_after(p, t), journey(p, t), work(p, t),
+                 video(p, t), concepts(p, t), reviews(p, t), band(p, t), versus(p, t), quote(p, t), faq(p, t), final(p, t)]
     body = "\n".join(s for s in sections if s)
     return f"""{head(p)}
 <body>
@@ -537,6 +625,7 @@ def main():
     os.makedirs(os.path.join(DIST, "lp-assets"))
     for fn in ("haus.css", "haus.js"):
         shutil.copy(os.path.join(SRC, fn), os.path.join(DIST, "lp-assets", fn))
+    shutil.copytree(os.path.join(SRC, "work"), os.path.join(DIST, "lp-images", "work"))
     for p in PAGES:
         open(os.path.join(DIST, p["file"]), "w", encoding="utf-8").write(build_page(p))
         print("built", p["file"])

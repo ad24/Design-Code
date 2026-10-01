@@ -228,6 +228,36 @@
     });
   });
 
+
+  /* ---------- before / after: range input drives a clip-path (keyboard + touch accessible) ---------- */
+  $$('.ba').forEach(function (sec) {
+    $$('.ba-range', sec).forEach(function (r) {
+      var stage = r.closest('.ba-stage');
+      var set = function () { var v = HT.rtl ? 100 - r.value : r.value; stage.style.setProperty('--pos', v + '%'); };
+      r.addEventListener('input', set); set();
+    });
+    $$('[data-ba]', sec).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var i = b.getAttribute('data-ba');
+        $$('[data-ba]', sec).forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+        $$('[data-pane]', sec).forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== i; });
+        track('ht_before_after', { page: HT.page, pair: i });
+      });
+    });
+  });
+
+  /* ---------- video: Drive player loads only on demand ---------- */
+  $$('.vid[data-drive]').forEach(function (v) {
+    var btn = $('.vid-play', v);
+    btn.addEventListener('click', function () {
+      var f = document.createElement('iframe');
+      f.src = 'https://drive.google.com/file/d/' + v.getAttribute('data-drive') + '/preview';
+      f.allow = 'autoplay; fullscreen'; f.setAttribute('allowfullscreen', ''); f.title = btn.getAttribute('aria-label');
+      v.appendChild(f); btn.remove();
+      track('ht_video_play', { page: HT.page });
+    });
+  });
+
   /* hide a work photo whose file is missing, so a broken image never shows */
   $$('img[data-soft]').forEach(function (im) {
     var hide = function () { var f = im.closest('figure') || im.closest('.tile'); if (f) f.style.display = 'none'; };
